@@ -10,5 +10,8 @@
     "dev": "npm run dev --workspace=@aquapay/frontend",
     "build": "npm run build --workspace=@aquapay/frontend",
     "lint": "npm run lint --workspace=@aquapay/frontend"
+  },
+  "dependencies": {
+    "dotenv": "^17.2.3"
   }
 }

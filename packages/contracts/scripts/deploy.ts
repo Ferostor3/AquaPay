@@ -1,99 +1,57 @@
 import { ethers } from "hardhat";
-import * as dotenv from "dotenv";
-
-dotenv.config();
 
 async function main() {
-  console.log("🚀 Deploying AquaPay Web3 Contracts...\n");
-
   const [deployer] = await ethers.getSigners();
-  console.log("Deploying contracts with account:", deployer.address);
-  console.log("Account balance:", ethers.formatEther(await ethers.provider.getBalance(deployer.address)), "ETH\n");
+  const deployerAddress = await deployer.getAddress();
+  console.log("Deploying contracts with account:", deployerAddress);
 
-  // Dirección del token stablecoin (USDC en Scroll Sepolia)
-  // Para testnet, puedes usar un mock token o la dirección real de USDC
-  const STABLECOIN_ADDRESS = process.env.STABLECOIN_ADDRESS || "0x..."; // Actualizar con la dirección real
+  const balance = await ethers.provider.getBalance(deployerAddress);
+  console.log("Account balance:", ethers.formatEther(balance), "ETH");
 
-  // 1. Deploy SavingsPool (necesita ser primero porque otros contratos lo referencian)
-  console.log("📦 Deploying SavingsPool...");
-  const SavingsPool = await ethers.getContractFactory("SavingsPool");
-  const savingsPool = await SavingsPool.deploy(STABLECOIN_ADDRESS);
+  // --- Deploy SavingsPool ---
+  const SavingsPoolFactory = await ethers.getContractFactory("SavingsPool");
+  const savingsPool = await SavingsPoolFactory.deploy(deployerAddress); // admin
   await savingsPool.waitForDeployment();
-  const savingsPoolAddress = await savingsPool.getAddress();
-  console.log("✅ SavingsPool deployed to:", savingsPoolAddress);
+  console.log("📦 SavingsPool deployed at:", savingsPool.target);
 
-  // 2. Deploy AquaPay
-  console.log("\n📦 Deploying AquaPay...");
-  const AquaPay = await ethers.getContractFactory("AquaPay");
-  const aquaPay = await AquaPay.deploy(STABLECOIN_ADDRESS);
+  // --- Deploy MockERC20 como stablecoin (solo testnet) ---
+  const MockERC20Factory = await ethers.getContractFactory("MockERC20");
+  const stablecoin = await MockERC20Factory.deploy("Mock USDC", "mUSDC", 6);
+  await stablecoin.waitForDeployment();
+  console.log("📦 Stablecoin deployed at:", stablecoin.target);
+
+  // --- Deploy AquaPay ---
+  const AquaPayFactory = await ethers.getContractFactory("AquaPay");
+  const aquaPay = await AquaPayFactory.deploy(stablecoin.target); // necesita stablecoin
   await aquaPay.waitForDeployment();
-  const aquaPayAddress = await aquaPay.getAddress();
-  console.log("✅ AquaPay deployed to:", aquaPayAddress);
+  console.log("📦 AquaPay deployed at:", aquaPay.target);
 
-  // 3. Deploy Billing
-  console.log("\n📦 Deploying Billing...");
-  const Billing = await ethers.getContractFactory("Billing");
-  const billing = await Billing.deploy(aquaPayAddress);
+  // --- Deploy Billing ---
+  const BillingFactory = await ethers.getContractFactory("Billing");
+  const billing = await BillingFactory.deploy(aquaPay.target); // necesita AquaPay
   await billing.waitForDeployment();
-  const billingAddress = await billing.getAddress();
-  console.log("✅ Billing deployed to:", billingAddress);
+  console.log("📦 Billing deployed at:", billing.target);
 
-  // 4. Deploy MicroCredit
-  console.log("\n📦 Deploying MicroCredit...");
-  const MicroCredit = await ethers.getContractFactory("MicroCredit");
-  const microCredit = await MicroCredit.deploy(STABLECOIN_ADDRESS, aquaPayAddress, savingsPoolAddress);
+  // --- Deploy MicroCredit ---
+  const MicroCreditFactory = await ethers.getContractFactory("MicroCredit");
+  const microCredit = await MicroCreditFactory.deploy(
+    stablecoin.target, // stablecoin
+    aquaPay.target,    // AquaPay
+    savingsPool.target // community pool
+  );
   await microCredit.waitForDeployment();
-  const microCreditAddress = await microCredit.getAddress();
-  console.log("✅ MicroCredit deployed to:", microCreditAddress);
+  console.log("📦 MicroCredit deployed at:", microCredit.target);
 
-  // 5. Configurar interconexiones
-  console.log("\n🔗 Configuring contract connections...");
-  
-  // Configurar contratos en AquaPay
-  await aquaPay.setContracts(billingAddress, microCreditAddress, savingsPoolAddress);
-  console.log("✅ Connected contracts to AquaPay");
+  // --- Configurar contratos en AquaPay ---
+  await aquaPay.setContracts(billing.target, microCredit.target, savingsPool.target);
+  console.log("✅ AquaPay configured with auxiliary contracts");
 
-  // Configurar contratos en SavingsPool
-  await savingsPool.setContracts(aquaPayAddress, microCreditAddress);
-  console.log("✅ Connected contracts to SavingsPool");
-
-  // Configurar Billing con AquaPay
-  await billing.setAquaPayContract(aquaPayAddress);
-  console.log("✅ Connected Billing to AquaPay");
-
-  console.log("\n✨ Deployment Summary:");
-  console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-  console.log("SavingsPool:", savingsPoolAddress);
-  console.log("AquaPay:", aquaPayAddress);
-  console.log("Billing:", billingAddress);
-  console.log("MicroCredit:", microCreditAddress);
-  console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
-
-  // Guardar direcciones en un archivo (opcional)
-  const deploymentInfo = {
-    network: (await ethers.provider.getNetwork()).name,
-    chainId: (await ethers.provider.getNetwork()).chainId,
-    deployer: deployer.address,
-    contracts: {
-      savingsPool: savingsPoolAddress,
-      aquaPay: aquaPayAddress,
-      billing: billingAddress,
-      microCredit: microCreditAddress,
-    },
-    timestamp: new Date().toISOString(),
-  };
-
-  console.log("📝 Deployment Info:");
-  console.log(JSON.stringify(deploymentInfo, null, 2));
-
-  console.log("\n✅ Deployment completed successfully!");
+  console.log("✅ All contracts deployed successfully!");
 }
 
 main()
   .then(() => process.exit(0))
   .catch((error) => {
-    console.error("❌ Deployment failed:", error);
+    console.error(error);
     process.exit(1);
   });
-
-
