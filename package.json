@@ -1,0 +1,14 @@
+{
+  "name": "aquapay-web3",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "packages/contracts",
+    "packages/frontend"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace=@aquapay/frontend",
+    "build": "npm run build --workspace=@aquapay/frontend",
+    "lint": "npm run lint --workspace=@aquapay/frontend"
+  }
+}
