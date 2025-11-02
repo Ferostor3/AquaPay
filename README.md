@@ -27,6 +27,8 @@ aquapay-web3/
 └── README.md
 ```
 
+contrato: 0x8615F0e48dd21781B6052a5f23601a21F7687422
+
 ## 🚀 Inicio Rápido
 
 ### Prerequisitos
